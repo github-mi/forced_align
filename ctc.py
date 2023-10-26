@@ -1,8 +1,30 @@
 import torch
 
 
-def ctc_alignment(log_probs, targets, input_lengths, target_lengths, blank=0, ignore_id=-1):
-    targets[targets==ignore_id] = 0
+def ctc_forced_align(
+    log_probs: torch.Tensor,
+    targets: torch.Tensor,
+    input_lengths: torch.Tensor,
+    target_lengths: torch.Tensor,
+    blank: int = 0,
+    ignore_id: int = -1,
+) -> torch.Tensor:
+    """Align a CTC label sequence to an emission.
+
+    Args:
+        log_probs (Tensor): log probability of CTC emission output.
+            Tensor of shape `(B, T, C)`. where `B` is the batch size, `T` is the input length,
+            `C` is the number of characters in alphabet including blank.
+        targets (Tensor): Target sequence. Tensor of shape `(B, L)`,
+            where `L` is the target length.
+        input_lengths (Tensor):
+            Lengths of the inputs (max value must each be <= `T`). 1-D Tensor of shape `(B,)`.
+        target_lengths (Tensor):
+            Lengths of the targets. 1-D Tensor of shape `(B,)`.
+        blank_id (int, optional): The index of blank symbol in CTC emission. (Default: 0)
+        ignore_id (int, optional): The index of ignore symbol in CTC emission. (Default: -1)
+    """
+    targets[targets==ignore_id] = blank
 
     batch_size, input_time_size, _ = log_probs.size()
     B_arange = torch.arange(batch_size, device=input_lengths.device)
@@ -28,8 +50,7 @@ def ctc_alignment(log_probs, targets, input_lengths, target_lengths, blank=0, ig
     best_score[:, zero_padding + 0] = log_probs[:, 0, blank]
     best_score[:, zero_padding + 1] = log_probs[B_arange, 0, _t_a_r_g_e_t_s_[:, 1]]
 
-    backpointers_shape = [batch_size, input_time_size, padded_t]
-    backpointers = torch.zeros(backpointers_shape, device=log_probs.device, dtype=targets.dtype)
+    backpointers = torch.zeros((batch_size, input_time_size, padded_t), device=log_probs.device, dtype=targets.dtype)
 
     for t in range(1, input_time_size):
         prev = torch.stack([best_score[:, 2:], best_score[:, 1:-1], torch.where(diff_labels, best_score[:, :-2], zero)])
