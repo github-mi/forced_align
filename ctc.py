@@ -24,10 +24,10 @@ def ctc_forced_align(
         blank_id (int, optional): The index of blank symbol in CTC emission. (Default: 0)
         ignore_id (int, optional): The index of ignore symbol in CTC emission. (Default: -1)
     """
-    targets[targets==ignore_id] = blank
+    targets[targets == ignore_id] = blank
 
     batch_size, input_time_size, _ = log_probs.size()
-    B_arange = torch.arange(batch_size, device=input_lengths.device)
+    bsz_indices = torch.arange(batch_size, device=input_lengths.device)
 
     _t_a_r_g_e_t_s_ = torch.cat(
         (
@@ -48,7 +48,7 @@ def ctc_forced_align(
     padded_t = zero_padding + _t_a_r_g_e_t_s_.size(-1)
     best_score = torch.full((batch_size, padded_t), zero, device=log_probs.device, dtype=log_probs.dtype)
     best_score[:, zero_padding + 0] = log_probs[:, 0, blank]
-    best_score[:, zero_padding + 1] = log_probs[B_arange, 0, _t_a_r_g_e_t_s_[:, 1]]
+    best_score[:, zero_padding + 1] = log_probs[bsz_indices, 0, _t_a_r_g_e_t_s_[:, 1]]
 
     backpointers = torch.zeros((batch_size, input_time_size, padded_t), device=log_probs.device, dtype=targets.dtype)
 
@@ -63,12 +63,12 @@ def ctc_forced_align(
     )
 
     path = torch.zeros((batch_size, input_time_size), device=best_score.device, dtype=torch.long)
-    path[B_arange, input_lengths - 1] = zero_padding + target_lengths * 2 - 1 + l1l2.argmax(dim=-1)
+    path[bsz_indices, input_lengths - 1] = zero_padding + target_lengths * 2 - 1 + l1l2.argmax(dim=-1)
 
     for t in range(input_time_size - 1, 0, -1):
-        indices = path[:, t]
-        prev_max_idx = backpointers[B_arange, t, indices]
-        path[:, t - 1] += indices - prev_max_idx
+        target_indices = path[:, t]
+        prev_max_idx = backpointers[bsz_indices, t, target_indices]
+        path[:, t - 1] += target_indices - prev_max_idx
 
     alignments = _t_a_r_g_e_t_s_.gather(dim=-1, index=(path - zero_padding).clamp(min=0))
     return alignments
